@@ -42,11 +42,38 @@ startServer();
 // =====================
 // Routes
 // =====================
+//http://localhost:8080/user?limit=5&page=1
 app.get('/user', async (req, res) => {
-  const [users] = await pool.query('SELECT * FROM users');
-  res.status(200).json(users);
+  try {
+ 
+    const page = parseInt(req.query.page) || 1;       
+    const limit = parseInt(req.query.limit) || 10;  
+    const offset = (page - 1) * limit;
+
+    // کوئری با LIMIT و OFFSET
+    const [users] = await pool.query(
+      'SELECT * FROM users LIMIT ? OFFSET ?',
+      [limit, offset]
+    );
+
+    res.status(200).json({
+      page,
+      limit,
+      data: users
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'DB error' });
+  }
 });
 
+/*
+[
+  { "name": "Ali", "age": 30, "city": "Tehran" },
+  { "name": "Reza", "age": 25, "city":"Shiraz" }
+]
+  */
 app.post('/users/bulk', async (req, res) => {
   const users = req.body;
   const requiredKeys = ["name", "age", "city"];
