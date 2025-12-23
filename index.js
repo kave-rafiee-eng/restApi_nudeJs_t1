@@ -42,6 +42,27 @@ startServer();
 // =====================
 // Routes
 // =====================
+
+function parseJsonColumns(records) {
+  return records.map(record => {
+    const newRecord = { ...record };
+    for (const key in newRecord) {
+      if (typeof newRecord[key] === 'string') {
+        try {
+          const parsed = JSON.parse(newRecord[key]);
+          
+          if (typeof parsed === 'object' && parsed !== null) {
+            newRecord[key] = parsed;
+          }
+        } catch (e) {
+   
+        }
+      }
+    }
+    return newRecord;
+  });
+}
+
 //http://localhost:8080/user?limit=5&page=1
 app.get('/user', async (req, res) => {
   try {
@@ -50,16 +71,17 @@ app.get('/user', async (req, res) => {
     const limit = parseInt(req.query.limit) || 10;  
     const offset = (page - 1) * limit;
 
-    // کوئری با LIMIT و OFFSET
     const [users] = await pool.query(
       'SELECT * FROM users LIMIT ? OFFSET ?',
       [limit, offset]
     );
 
+    const transformed = parseJsonColumns(users);
+
     res.status(200).json({
       page,
       limit,
-      data: users
+      data: transformed
     });
 
   } catch (err) {
@@ -70,13 +92,13 @@ app.get('/user', async (req, res) => {
 
 /*
 [
-  { "name": "Ali", "age": 30, "city": "Tehran" },
-  { "name": "Reza", "age": 25, "city":"Shiraz" }
+  { "name": "Ali", "age": 30, "city": "Tehran", "preferences": { "theme": "dark", "notifications": true } },
+  { "name": "Reza", "age": 25, "city": "Shiraz", "preferences": { "theme": "light", "notifications": false } }
 ]
   */
 app.post('/users/bulk', async (req, res) => {
   const users = req.body;
-  const requiredKeys = ["name", "age", "city"];
+  const requiredKeys = ["name", "age", "city", "preferences"];
 
   if (!Array.isArray(users) || users.length === 0) {
     return res.status(400).json({ message: 'Array of users required' });
@@ -85,22 +107,31 @@ app.post('/users/bulk', async (req, res) => {
   // Validation
   const invalid = users.find(u => requiredKeys.some(k => !(k in u)));
   if (invalid) {
-    return res.status(400).json({ message: 'All users must have name, age, and city' });
+    return res.status(400).json({ message: 'All users must have name, age, city and preferences' });
   }
 
-  // Mapping
-  const values = users.map(u => requiredKeys.map(k => u[k]));
+  const values = users.map(u => [
+    u.name,
+    u.age,
+    u.city,
+    JSON.stringify(u.preferences) 
+  ]);
 
-  console.log(values)
+  console.log(values);
+
   try {
-    await pool.query('INSERT INTO users (name, age, city) VALUES ?', [values]);
+
+    await pool.query(
+      'INSERT INTO users (name, age, city, preferences) VALUES ?',
+      [values]
+    );
+
     res.status(201).json({ message: 'Users inserted', count: users.length });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'DB error' });
   }
 });
-
 /*
 app.post('/user/:id', async (req, res) => {
   const { id } = req.params;
